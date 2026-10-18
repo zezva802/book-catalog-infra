@@ -1,100 +1,76 @@
 # Phase 0 — Lab setup
 
-## Lab 1 — Multipass VM (Sep 28–29, 2026)
+Lab 1 ✅ · Lab 2 ✅ · Next: Lab 3 (SSH into the VM with my own key)
 
-**Goal:** a throwaway Ubuntu server I can break freely, created, stopped, started, deleted and recreated from the command line.
-
-### What I did
-
-1. Checked the CPU supports hardware virtualization and the kernel can use it.
-2. Installed Multipass 1.16.4 as a snap.
-3. Launched a VM named `server`: 2 GB RAM, 15 GB disk, default image (Ubuntu 26.04.1 LTS, codename resolute), 1 CPU.
-4. Inspected it from outside (`info`) and inside (`shell`), and ran the same system checks on my laptop to compare.
-5. Stopped and started it, deleted it, found that relaunching fails, purged it, relaunched it.
-6. Updated the package lists from inside the VM to prove it can reach the internet (Docker on the laptop didn't break the VM's networking).
-
-### Commands that mattered
+## Multipass
 
 ```bash
-# Is virtualization possible?
-cat /proc/cpuinfo                 # found the svm flag = CPU supports AMD-V (next time: filter instead of cat)
-ls -l /dev/kvm                    # exists = kernel KVM driver loaded and usable
-
-# Multipass
-sudo snap install multipass
-multipass version                 # 1.16.4
-multipass list                    # all instances: state, IP, image
-multipass launch --disk 15g --memory 2g --name server
-multipass info server             # one instance in detail: release, CPU, disk, memory, load
-multipass shell server            # open a shell inside the VM
-multipass stop server
-multipass start server
-multipass delete server           # soft delete: moves to "Deleted", name still taken
-multipass purge                   # empties the bin for good (ALL deleted instances)
-
-# System checks (ran on VM and laptop)
-hostname                          # machine name
-lsb_release -a                    # Ubuntu release
-uname -r                          # kernel version
-free -h                           # memory (read "available", not "free")
-df -h /                           # root disk size and usage
-ip address                        # interfaces and their IPs (full)
-ip -br address                    # same, one line per interface
-
-# Inside the VM
-sudo apt update                   # refresh the package catalogue (installs nothing)
+multipass launch --disk 15g --memory 2g --name server   # long flags: -d is disk, -m is memory
+multipass list                  # all VMs: state, IP
+multipass info server           # details: release, CPU, disk, memory
+multipass shell server
+multipass stop / start server
+multipass delete server         # soft delete — still uses disk, name still taken
+multipass recover server        # undo delete
+multipass purge                 # permanent, ALL deleted VMs
 ```
 
-### VM vs laptop
+**My VM:** `server` — Ubuntu 26.04.1, 1 CPU, 2 GB RAM (no swap), 15 GB disk, IP `10.149.127.100`
 
-| Check | VM (`server`) | Laptop (`terga-ubuntu`) |
+## Virtualization check
+
+```bash
+grep -c svm /proc/cpuinfo       # >0 = CPU supports AMD-V (vmx on Intel)
+ls -l /dev/kvm                  # exists = kernel KVM driver loaded and usable
+```
+
+"Supports" (CPU flag) ≠ "enabled" (BIOS on + driver loaded → `/dev/kvm` exists).
+
+## Quick system checks
+
+```bash
+hostname
+lsb_release -a                  # Ubuntu release
+uname -r                        # running kernel
+free -h                         # read "available", not "free"
+df -h /                         # root disk usage
+ip -br address                  # IPs, one line per interface
+uptime                          # time since boot
+```
+
+## Laptop network
+
+| Interface | IP | What it is |
 | --- | --- | --- |
-| Hostname | server | terga-ubuntu |
-| Release | Ubuntu 26.04.1 LTS | Ubuntu 26.04.1 LTS |
-| Kernel | 7.0.0-31-generic | 7.0.0-31-generic |
-| Memory total | 1.9Gi, no swap | 9.1Gi, 4.0Gi swap |
-| Root disk | 14G | 233G |
-| IP | ens3 10.149.127.30, then 10.149.127.100 after recreating | wlp2s0 10.97.85.252 |
+| `lo` | 127.0.0.1 | loopback |
+| `wlp2s0` | 10.97.85.252 | Wi-Fi |
+| `docker0` | 172.17.0.1 | Docker bridge (DOWN when no containers) |
+| `mpqemubr0` | 10.149.127.1 | Multipass switch = the VM's gateway |
+| `tap-…` | — | virtual cable to the VM |
 
-Laptop interfaces: `lo` 127.0.0.1 (UNKNOWN), `wlp2s0` 10.97.85.252 (UP, Wi-Fi), `docker0` 172.17.0.1 (DOWN, no containers), `mpqemubr0` 10.149.127.1 (UP, Multipass switch, the VM's gateway), `tap-2042d79a31d` (UP, virtual cable, no IPv4).
+## Facts worth remembering
 
-### What broke and why
+- **VM has its own kernel.** Same version as the laptop, but different `uptime` proves two kernels. A container would show the *host's* kernel.
+- **New kernel runs only after a reboot.** apt installs it on disk; the old one keeps running.
+- **VM IP comes from DHCP, keyed on MAC.** Stop/start = same MAC = same IP. Delete + relaunch = new MAC = new IP. Don't hardcode IPs.
+- **`10.x` addresses are private** — unreachable from the internet, safe to publish.
 
-- **Swapped flags.** First wrote `multipass launch -n server -d 2g -m 15g`: that asks for a 2 GB disk and 15 GB RAM. `-d` is disk, `-m` is memory. Fix: use long flags (`--disk`, `--memory`) so the command explains itself.
-- **Relaunch failed:** `launch failed: instance "server" already exists`. `delete` is a soft delete: the VM sits in a recycle bin, still takes disk space, and keeps its name. `purge` removes it for good. `recover` brings it back.
-- **`ip -br` printed the usage text.** The usage line is `ip [ OPTIONS ] OBJECT { COMMAND | help }`: `[ ]` is optional, no brackets is required, `{ a | b }` means pick one. I gave an option but no object. Fix: `ip -br address`.
-- **Guessed command names** (`sysinfo`, `unix -v`, `memory`) → "command not found". Fix: search the man pages by keyword instead of guessing.
-- **The IP changed** from .30 to .100 after recreating the VM, so anything that stored the old IP would break.
+## SSH & GitHub
 
-### Concepts — in my own words
+```bash
+ssh -T git@github.com           # auth test; -T = no terminal (avoids "PTY allocation request failed")
+git config --list --show-origin # every setting + the file it came from
+```
 
-_Answer each without scrolling up. If I can't, that's what to review._
+- Repo: `git@github.com:zezva802/book-catalog-infra.git` (public) — SSH URL uses my key; HTTPS would need a token.
+- Key: `~/.ssh/id_ed25519` (private, must be **600** or SSH refuses it) + `.pub` (on GitHub).
+- `known_hosts` = servers I trust (fingerprints). `authorized_keys` = keys allowed to log in **to this machine** (mine is empty).
+- Git config: `/etc/gitconfig` (system) < `~/.gitconfig` (user) < `.git/config` (repo) — most specific wins.
+- `git status` "ahead/behind" compares with the **saved** `origin/main`, no network. Run `git fetch` for the real picture.
+- Never commit: private keys, tokens, passwords, `.env`, connection strings. Deleting later doesn't remove them from history.
 
-- VM vs container. Why do the VM and laptop show the same kernel version, and what would `uname -r` show inside a container?
-  -
-- What is `/dev`? What's the difference between `/dev`, `/proc` and `/sys`?
-  -
-- The 5 links in the KVM chain, and what a missing `/dev/kvm` tells me:
-  -
-- `free` vs `available` in `free -h`, and what real memory trouble looks like:
-  -
-- Why does my laptop have four different IPs?
-  -
-- IP address vs port:
-  -
-- What `/24` means, and what a gateway is:
-  -
-- Why the VM's IP changed, and three ways to stop depending on an IP:
-  -
-- `delete` vs `purge`, and why tools make deleting a two-step action:
-  -
+## Open
 
-### Quiz
-
-About 2.5 / 5. Solid on free vs available and delete vs purge. Half-right on VM vs container kernel and the KVM chain: I had the idea but not the precise distinction ("supports" vs "enabled", "OS files" vs "kernel"). Didn't recall DHCP and why IPs change: review before Lab 3.
-
-### Unfinished
-
-- [ ] Find the raw files `free` and `lsb_release` read from, and match them to the command output.
-- [ ] Prove the VM and laptop run separate kernels even though the versions match (hint: boot time).
-- [ ] Draw the laptop ↔ VM network map from memory in the notebook.
+- [ ] Find the raw files behind `free` and `lsb_release`
+- [ ] Draw laptop ↔ VM network map from memory
+- [ ] Delete `~/dev/book-catalog-infra-draft`
