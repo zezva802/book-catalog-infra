@@ -1,6 +1,6 @@
 # Phase 0 — Lab setup
 
-Lab 1 ✅ · Lab 2 ✅ · Lab 3 ✅ · Lab 4 ✅ · Next: "Done when" test (fresh VM, no notes)
+✅ **Phase 0 complete (Oct 18)** — all 4 labs + "Done when" test passed without notes
 
 ## Multipass
 
@@ -15,7 +15,7 @@ multipass recover server        # undo delete
 multipass purge                 # permanent, ALL deleted VMs
 ```
 
-**My VM:** `server` — Ubuntu 26.04.1, 1 CPU, 2 GB RAM (no swap), 15 GB disk, IP `10.149.127.100`
+**My VM:** `server` — Ubuntu 26.04.1, 1 CPU, 2 GB RAM (no swap), 15 GB disk, IP `10.149.127.210` (changes every time I recreate it — check with `multipass list`)
 
 ## Virtualization check
 
@@ -72,9 +72,10 @@ git config --list --show-origin # every setting + the file it came from
 ## SSH into the VM (Lab 3)
 
 ```bash
-ssh ubuntu@10.149.127.100       # default Multipass user is ubuntu
+ssh ubuntu@10.149.127.210       # default Multipass user is ubuntu
 # setup, inside `multipass shell server`:
 echo "<my .pub line>" >> ~/.ssh/authorized_keys   # >> appends. > would wipe Multipass's key
+ssh-keygen -R 10.149.127.100    # remove a stale host from known_hosts
 ```
 
 | | Laptop (client) | VM (server) |
@@ -92,8 +93,11 @@ How a login works, once per connection:
 4. Laptop **signs** session data with the private key → server **verifies** with the public key. Signing, not decrypting.
 
 - Public key alone proves nothing — anyone can get it (`github.com/zezva802.keys`). The signature proves I hold the private key.
-- `Permission denied (publickey)` = my key isn't in that user's `authorized_keys`.
-- Recreated VM → empty `authorized_keys` **and** new host key → `REMOTE HOST IDENTIFICATION HAS CHANGED`.
+- Which error comes from which file:
+  - `Permission denied (publickey)` → **user key**: mine isn't in the server's `authorized_keys`.
+  - `REMOTE HOST IDENTIFICATION HAS CHANGED` → **host key**: the server at that IP doesn't match my `known_hosts`.
+- Recreated VM → empty `authorized_keys` + new host key. Same IP → big warning. New IP → just the first-time prompt, and the old entry goes stale.
+- On real servers, check the fingerprint against what the provider shows before typing `yes`.
 - SSH doesn't care if an IP is private; routers do. `10.149.127.x` is reachable only from my laptop.
 
 ## tmux (Lab 4)
@@ -120,9 +124,7 @@ Prefix: `Ctrl+b`, release, then:
 - tmux = background server that owns the shells; the window is just a viewer. Close the window → shells survive.
 - Survives only on the machine running tmux. For long jobs on a server, run tmux **on the server**.
 
-## Open
+## Carried over to Phase 1
 
-- [ ] "Done when" test: fresh VM, create/stop/start/delete + SSH in, no notes
-- [ ] Find the raw files behind `free` and `lsb_release`
+- [ ] Find the raw files behind `free` and `lsb_release` (fits the `/proc` work in Phase 1)
 - [ ] Draw laptop ↔ VM network map from memory
-- [ ] Delete `~/dev/book-catalog-infra-draft`
