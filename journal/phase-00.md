@@ -1,6 +1,6 @@
 # Phase 0 — Lab setup
 
-Lab 1 ✅ · Lab 2 ✅ · Next: Lab 3 (SSH into the VM with my own key)
+Lab 1 ✅ · Lab 2 ✅ · Lab 3 ✅ · Lab 4 ✅ · Next: "Done when" test (fresh VM, no notes)
 
 ## Multipass
 
@@ -43,7 +43,7 @@ uptime                          # time since boot
 | Interface | IP | What it is |
 | --- | --- | --- |
 | `lo` | 127.0.0.1 | loopback |
-| `wlp2s0` | 10.97.85.252 | Wi-Fi |
+| `wlp2s0` | changes (DHCP): 10.97.85.252 → 10.253.106.252 | Wi-Fi |
 | `docker0` | 172.17.0.1 | Docker bridge (DOWN when no containers) |
 | `mpqemubr0` | 10.149.127.1 | Multipass switch = the VM's gateway |
 | `tap-…` | — | virtual cable to the VM |
@@ -69,8 +69,60 @@ git config --list --show-origin # every setting + the file it came from
 - `git status` "ahead/behind" compares with the **saved** `origin/main`, no network. Run `git fetch` for the real picture.
 - Never commit: private keys, tokens, passwords, `.env`, connection strings. Deleting later doesn't remove them from history.
 
+## SSH into the VM (Lab 3)
+
+```bash
+ssh ubuntu@10.149.127.100       # default Multipass user is ubuntu
+# setup, inside `multipass shell server`:
+echo "<my .pub line>" >> ~/.ssh/authorized_keys   # >> appends. > would wipe Multipass's key
+```
+
+| | Laptop (client) | VM (server) |
+| --- | --- | --- |
+| Private key | `~/.ssh/id_ed25519` — never leaves | — |
+| My public key | `~/.ssh/id_ed25519.pub` | copy in `~/.ssh/authorized_keys` |
+| Trust the other side | `known_hosts` (VM's host key) | — |
+| Server identity | — | `/etc/ssh/ssh_host_*_key` |
+
+How a login works, once per connection:
+
+1. Agree on a session key → everything encrypted from here.
+2. Server signs with its host key → laptop checks `known_hosts` (the fingerprint prompt the first time).
+3. Laptop offers my public key → server checks it's in `authorized_keys`.
+4. Laptop **signs** session data with the private key → server **verifies** with the public key. Signing, not decrypting.
+
+- Public key alone proves nothing — anyone can get it (`github.com/zezva802.keys`). The signature proves I hold the private key.
+- `Permission denied (publickey)` = my key isn't in that user's `authorized_keys`.
+- Recreated VM → empty `authorized_keys` **and** new host key → `REMOTE HOST IDENTIFICATION HAS CHANGED`.
+- SSH doesn't care if an IP is private; routers do. `10.149.127.x` is reachable only from my laptop.
+
+## tmux (Lab 4)
+
+Install with `apt`, not snap (snap sandbox gets in the way of terminal tools).
+
+```bash
+tmux new -s lab                 # new named session
+tmux ls                         # list sessions
+tmux attach -t lab              # reattach
+```
+
+Prefix: `Ctrl+b`, release, then:
+
+| Key | Does |
+| --- | --- |
+| `%` | split left / right |
+| `"` | split top / bottom |
+| arrows | move between panes |
+| `o` | next pane |
+| `d` | detach (session keeps running) |
+| `s` | pick a session |
+
+- tmux = background server that owns the shells; the window is just a viewer. Close the window → shells survive.
+- Survives only on the machine running tmux. For long jobs on a server, run tmux **on the server**.
+
 ## Open
 
+- [ ] "Done when" test: fresh VM, create/stop/start/delete + SSH in, no notes
 - [ ] Find the raw files behind `free` and `lsb_release`
 - [ ] Draw laptop ↔ VM network map from memory
 - [ ] Delete `~/dev/book-catalog-infra-draft`
